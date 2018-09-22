@@ -13,15 +13,15 @@ _sK.hex.game = Object.assign(
         let Layout = _sK.hex.geometry.Layout;
         let Orientation = _sK.hex.geometry.Orientation;
         // Game settings variables
-        let canvHeight = 0;
-        let canvWidth = 0;
-        let hexSize = 0;
-        let unitSize = 0;
-        let gameLayout = {};
+        let canvHeight;
+        let canvWidth;
+        let hexSize;
+        let unitSize;
+        let gameLayout;
         // Game data
-        let gameGrid = [];
-        let gameUnits = [];
-        let player = {};
+        let gameGrid;
+        let gameUnits;
+        let player;
         // /////////////////
         // Helper classes //
         // /////////////////
@@ -69,11 +69,7 @@ _sK.hex.game = Object.assign(
             }
 
             equal(cell) {
-                return (
-                    cell instanceof Cell &&
-                    cell.hex.equal(this.hex) &&
-                    cell.color == this.color
-                );
+                return cell instanceof Cell && cell.hex.equal(this.hex);
             }
             toString() {
                 return `Cell ${this.hex.coords}`;
@@ -99,11 +95,13 @@ _sK.hex.game = Object.assign(
                     }
                     position = new Cell(position);
                 }
-                if (!gameGrid.onGrid(position.hex)) {
-                    console.warn(position.hex);
+                if (!gameGrid.onGrid(position)) {
+                    console.warn(position);
                     throw 'Hexagon is not on grid';
                 }
-                this.position = position;
+                this.position = gameGrid.filter(cell =>
+                    cell.equal(position)
+                )[0];
             }
             setColor(c) {
                 if (typeof c === 'number') {
@@ -123,26 +121,8 @@ _sK.hex.game = Object.assign(
             move(dir) {
                 try {
                     this.setPosition(this.position.neighbor(dir));
-                } catch (err) {
-                    console.warn(err);
-                }
+                } catch (err) {}
             }
-        }
-        // ////////////////////
-        // Updating routines //
-        // ////////////////////
-        function update() {
-            // Update cell colors based on distance from player
-            gameGrid.forEach(cell => {
-                let dist = player.position.distance(cell);
-                cell.setColor(
-                    player.range[
-                        dist < player.range.length - 1
-                            ? dist
-                            : player.range.length - 1
-                    ]
-                );
-            });
         }
         // //////////////////////////
         // Initialization Routines //
@@ -160,7 +140,22 @@ _sK.hex.game = Object.assign(
             );
         }
         function generateGameGrid(opt) {
-            // Grid layouts
+            newGameGrid();
+            generateLayout(opt);
+        }
+        function newGameGrid() {
+            gameGrid = [];
+            gameGrid.corners = () =>
+                gameGrid.map(cell => gameLayout.polygonCorners(cell.hex));
+            gameGrid.onGrid = cell => gameGrid.some(c => c.equal(cell));
+            gameGrid.add = cell => {
+                if (!gameGrid.onGrid(cell)) {
+                    gameGrid.push(cell);
+                }
+            };
+            console.log(gameGrid);
+        }
+        function generateLayout(opt) {
             switch (parseInt(opt)) {
                 case 0:
                     simple();
@@ -172,16 +167,12 @@ _sK.hex.game = Object.assign(
                     single();
                     break;
             }
-            // Assign grid helpers
-            gameGrid.corners = () =>
-                gameGrid.map(cell => gameLayout.polygonCorners(cell.hex));
-            gameGrid.onGrid = hex => gameGrid.some(h => h.hex.equal(hex));
         }
         function single() {
-            gameGrid = [new Cell()];
+            gameGrid.add(new Cell());
         }
         function simple() {
-            gameGrid = [new Cell()];
+            gameGrid.add(new Cell());
             gameGrid.forEach(cell => {
                 cell.diagonals().forEach(neighbor =>
                     gameGrid.push(new Cell(neighbor))
@@ -193,7 +184,7 @@ _sK.hex.game = Object.assign(
         }
         function testGrid() {
             // Origin -- may not be needed in future layouting
-            gameGrid = [new Cell()];
+            gameGrid.add(new Cell());
             // "remotes"
             gameGrid[0]
                 .neighbors()
@@ -212,10 +203,22 @@ _sK.hex.game = Object.assign(
         }
         function generatePlayer() {
             player = new Unit(gameGrid[0], [0, 125, 0]);
-            player.range = generateRange(12);
+            player.range = generateRange(6);
             gameUnits = [player];
+            updateDistances();
         }
-
+        function updateDistances() {
+            gameGrid.forEach(cell => {
+                let dist = player.position.distance(cell);
+                cell.setColor(
+                    player.range[
+                        dist < player.range.length - 1
+                            ? dist
+                            : player.range.length - 1
+                    ]
+                );
+            });
+        }
         function generateRange(n) {
             if (typeof n !== 'number') {
                 console.warn(n);
@@ -239,7 +242,6 @@ _sK.hex.game = Object.assign(
                     translate(canvWidth / 2, canvHeight / 2);
                     draw.grid();
                     draw.units();
-                    update();
                 },
                 // Secondary drawing routines
                 {
@@ -298,6 +300,7 @@ _sK.hex.game = Object.assign(
                         break;
                 }
                 player.move(dir);
+                updateDistances();
             };
         }
         return {
